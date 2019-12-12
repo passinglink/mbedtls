@@ -37,6 +37,8 @@
  *
  */
 
+#define LOW_MEM_HACK
+
 #if !defined(MBEDTLS_CONFIG_FILE)
 #include "mbedtls/config.h"
 #else
@@ -762,6 +764,7 @@ cleanup:
     return( 0 );
 }
 
+#ifndef LOW_MEM_HACK
 /*
  * Generate or update blinding values, see section 10 of:
  *  KOCHER, Paul C. Timing attacks on implementations of Diffie-Hellman, RSA,
@@ -801,6 +804,7 @@ static int rsa_prepare_blinding( mbedtls_rsa_context *ctx,
 cleanup:
     return( ret );
 }
+#endif
 
 /*
  * Exponent blinding supposed to prevent side-channel attacks using multiple
@@ -838,25 +842,32 @@ int mbedtls_rsa_private( mbedtls_rsa_context *ctx,
     /* Temporary holding the result */
     mbedtls_mpi T;
 
+#ifndef LOW_MEM_HACK
     /* Temporaries holding P-1, Q-1 and the
      * exponent blinding factor, respectively. */
     mbedtls_mpi P1, Q1, R;
+#endif // LOW_MEM_HACK
 
 #if !defined(MBEDTLS_RSA_NO_CRT)
     /* Temporaries holding the results mod p resp. mod q. */
     mbedtls_mpi TP, TQ;
 
+#ifndef LOW_MEM_HACK
     /* Temporaries holding the blinded exponents for
      * the mod p resp. mod q computation (if used). */
     mbedtls_mpi DP_blind, DQ_blind;
+#endif
 
     /* Pointers to actual exponents to be used - either the unblinded
      * or the blinded ones, depending on the presence of a PRNG. */
     mbedtls_mpi *DP = &ctx->DP;
     mbedtls_mpi *DQ = &ctx->DQ;
 #else
+
+#ifndef LOW_MEM_HACK
     /* Temporary holding the blinded exponent (if used). */
     mbedtls_mpi D_blind;
+#endif // LOW_MEM_HACK
 
     /* Pointer to actual exponent to be used - either the unblinded
      * or the blinded one, depending on the presence of a PRNG. */
@@ -865,17 +876,23 @@ int mbedtls_rsa_private( mbedtls_rsa_context *ctx,
 
     /* Temporaries holding the initial input and the double
      * checked result; should be the same in the end. */
+#ifndef LOW_MEM_HACK
     mbedtls_mpi I, C;
+#else
+    mbedtls_mpi I;
+#endif // LOW_MEM_HACK
 
     RSA_VALIDATE_RET( ctx != NULL );
     RSA_VALIDATE_RET( input  != NULL );
     RSA_VALIDATE_RET( output != NULL );
 
+#ifndef LOW_MEM_HACK
     if( rsa_check_context( ctx, 1             /* private key checks */,
                                 f_rng != NULL /* blinding y/n       */ ) != 0 )
     {
         return( MBEDTLS_ERR_RSA_BAD_INPUT_DATA );
     }
+#endif // LOW_MEM_HACK
 
 #if defined(MBEDTLS_THREADING_C)
     if( ( ret = mbedtls_mutex_lock( &ctx->mutex ) ) != 0 )
@@ -885,10 +902,13 @@ int mbedtls_rsa_private( mbedtls_rsa_context *ctx,
     /* MPI Initialization */
     mbedtls_mpi_init( &T );
 
+#ifndef LOW_MEM_HACK
     mbedtls_mpi_init( &P1 );
     mbedtls_mpi_init( &Q1 );
     mbedtls_mpi_init( &R );
+#endif // LOW_MEM_HACK
 
+#ifndef LOW_MEM_HACK
     if( f_rng != NULL )
     {
 #if defined(MBEDTLS_RSA_NO_CRT)
@@ -898,13 +918,16 @@ int mbedtls_rsa_private( mbedtls_rsa_context *ctx,
         mbedtls_mpi_init( &DQ_blind );
 #endif
     }
+#endif // LOW_MEM_HACK
 
 #if !defined(MBEDTLS_RSA_NO_CRT)
     mbedtls_mpi_init( &TP ); mbedtls_mpi_init( &TQ );
 #endif
 
     mbedtls_mpi_init( &I );
+#ifndef LOW_MEM_HACK
     mbedtls_mpi_init( &C );
+#endif // LOW_MEM_HACK
 
     /* End of MPI initialization */
 
@@ -917,6 +940,7 @@ int mbedtls_rsa_private( mbedtls_rsa_context *ctx,
 
     MBEDTLS_MPI_CHK( mbedtls_mpi_copy( &I, &T ) );
 
+#ifndef LOW_MEM_HACK
     if( f_rng != NULL )
     {
         /*
@@ -968,6 +992,7 @@ int mbedtls_rsa_private( mbedtls_rsa_context *ctx,
         DQ = &DQ_blind;
 #endif /* MBEDTLS_RSA_NO_CRT */
     }
+#endif // LOW_MEM_HACK
 
 #if defined(MBEDTLS_RSA_NO_CRT)
     MBEDTLS_MPI_CHK( mbedtls_mpi_exp_mod( &T, &T, D, &ctx->N, &ctx->RN ) );
@@ -996,6 +1021,7 @@ int mbedtls_rsa_private( mbedtls_rsa_context *ctx,
     MBEDTLS_MPI_CHK( mbedtls_mpi_add_mpi( &T, &TQ, &TP ) );
 #endif /* MBEDTLS_RSA_NO_CRT */
 
+#ifndef LOW_MEM_HACK
     if( f_rng != NULL )
     {
         /*
@@ -1005,7 +1031,9 @@ int mbedtls_rsa_private( mbedtls_rsa_context *ctx,
         MBEDTLS_MPI_CHK( mbedtls_mpi_mul_mpi( &T, &T, &ctx->Vf ) );
         MBEDTLS_MPI_CHK( mbedtls_mpi_mod_mpi( &T, &T, &ctx->N ) );
     }
+#endif // LOW_MEM_HACK
 
+#ifndef LOW_MEM_HACK
     /* Verify the result to prevent glitching attacks. */
     MBEDTLS_MPI_CHK( mbedtls_mpi_exp_mod( &C, &T, &ctx->E,
                                           &ctx->N, &ctx->RN ) );
@@ -1014,6 +1042,7 @@ int mbedtls_rsa_private( mbedtls_rsa_context *ctx,
         ret = MBEDTLS_ERR_RSA_VERIFY_FAILED;
         goto cleanup;
     }
+#endif // LOW_MEM_HACK
 
     olen = ctx->len;
     MBEDTLS_MPI_CHK( mbedtls_mpi_write_binary( &T, output, olen ) );
@@ -1024,10 +1053,13 @@ cleanup:
         return( MBEDTLS_ERR_THREADING_MUTEX_ERROR );
 #endif
 
+#ifndef LOW_MEM_HACK
     mbedtls_mpi_free( &P1 );
     mbedtls_mpi_free( &Q1 );
     mbedtls_mpi_free( &R );
+#endif // LOW_MEM_HACK
 
+#ifndef LOW_MEM_HACK
     if( f_rng != NULL )
     {
 #if defined(MBEDTLS_RSA_NO_CRT)
@@ -1037,6 +1069,7 @@ cleanup:
         mbedtls_mpi_free( &DQ_blind );
 #endif
     }
+#endif // LOW_MEM_HACK
 
     mbedtls_mpi_free( &T );
 
@@ -1044,7 +1077,10 @@ cleanup:
     mbedtls_mpi_free( &TP ); mbedtls_mpi_free( &TQ );
 #endif
 
+#ifndef LOW_MEM_HACK
     mbedtls_mpi_free( &C );
+#endif // LOW_MEM_HACK
+
     mbedtls_mpi_free( &I );
 
     if( ret != 0 )
